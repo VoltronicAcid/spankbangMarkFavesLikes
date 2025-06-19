@@ -10,6 +10,8 @@
 // @run-at        document-idle
 // ==/UserScript==
 
+const VID_ID = document.getElementById("video")?.dataset.videoid;
+
 const logMessage = (msg) => {
     const logStyle = "background-color:cornsilk; color:darkblue; font-size: 12pt; padding: 5px";
     console.log(`%c${msg}`, logStyle);
@@ -19,8 +21,49 @@ const logError = (msg) => {
     console.log(`%c${msg}`, logStyle);
 };
 
+const getDatabase = async () => {
+    const databasePromise = new Promise((resolve, reject) => {
+        const openRequest = indexedDB.open("FavesLikes", 1);
+
+        openRequest.onupgradeneeded = function () {
+            logMessage("Upgrading/Installing database");
+            const { result: db } = openRequest;
+
+            const favesStore = db.createObjectStore("favedVideos", { keyPath: "id" });
+            favesStore.createIndex("faveIndex", "id", { unique: true });
+
+            const likesStore = db.createObjectStore("likedVideos", { keyPath: "id" });
+            likesStore.createIndex("likeIndex", "id", { unique: true });
+        };
+
+        openRequest.onsuccess = function () {
+            logMessage("Opened database successfully.");
+            const { result: db } = openRequest;
+            db.onclose = function () {
+                logMessage("Database closed.");
+            }
+            db.onerror = function () {
+                logError("Database error.");
+            }
+            resolve(db);
+        };
+
+        openRequest.onerror = function () {
+            logError(`Error with open database request.`);
+            const { code, message, name } = openRequest.error;
+            console.error(name, code);
+            console.error(message)
+            // const { result: db } = openRequest;
+            // db.close();
+            reject(message);
+        }
+    });
+
+    return databasePromise;
+};
+
 const getPage = async (url) => {
-    // logMessage(`Requesting page: ${url}`);
+    logMessage(`Requesting page: ${url}`);
     const response = await fetch(url);
     if (response.ok) {
         const parser = new DOMParser();
@@ -44,7 +87,7 @@ const getAllFavorites = async () => {
         videos = videos.concat(
             Array.from(
                 favoritesPage.getElementsByClassName("video-item"))
-                .map(div => ({ videoid: div.dataset.id, title: div.querySelector("a.thumb").title })
+                .map(div => ({ id: div.dataset.id, title: div.querySelector("a.thumb").title })
                 )
         );
 
@@ -59,29 +102,67 @@ const getAllFavorites = async () => {
 
 const getAllLikes = async () => { };
 
-const storesArePopulated = async () => {
-    return { favesStorePopulated: true, likesStorePopulated: true };
+const checkStorePopulated = async (db, storeName) => {
+    const query = new Promise((resolve, reject) => {
+        logMessage(`Checking if ${storeName} is populated.`);
+        const transaction = db.transaction(storeName, "readonly");
+        // console.log(transaction);
+        const store = transaction.objectStore(storeName);
+        // console.log(store);
+
+        const request = store.getAllKeys();
+        request.onsuccess = function () {
+            const { result: keys } = request;
+            // console.log(keys);
+            resolve(keys.length > 0);
+        };
+        request.onerror = function () {
+            logError(`Error with request on store ${storeName}`);
+            reject(request.error);
+        };
+    });
+
+    return query;
 };
 
-const populateFavesStore = async () => { };
-
-const populateLikesStore = async () => { };
-
-const getFaveLikeStatus = async (videoid) => {
-    return { isFave: true, isLike: true };
-}
-
 const highlightFaveIcon = () => {
-    logMessage('Setting Fave Color');
+    logMessage("Coloring Fave");
     const heart = document.querySelector("div.fv > svg.i_svg.i_new-ui-heart-outlined");
-    heart.style.fill = "fuchsia";
+    heart.style.fill = "#f08e84";
+};
+
+const populateFavesStore = async (db) => {
+    logMessage("Populating favorites");
+    const vids = await getAllFavorites();
+    // console.log(vids);
+    const insert = new Promise((resolve, reject) => {
+        const transaction = db.transaction("favedVideos", "readwrite");
+        const store = transaction.objectStore("favedVideos");
+        // const request = store.getAllKeys();
+        for (const vid of vids) {
+            store.add(vid);
+            if (vid.id === VID_ID) {
+                highlightFaveIcon();
+            }
+        }
+    });
+
+    return insert
 };
 
 const highlightLikeIcon = () => {
-    logMessage('Setting Like color');
+    logMessage("Coloring Like");
     const thumbsUp = document.querySelector("span.hot > svg.i_svg.i_new-ui-thumbs-up");
     thumbsUp.style.fill = "dodgerblue";
 };
+
+const populateLikesStore = async (db) => {
+    logMessage("Populating likes");
+};
+
+const getFaveLikeStatus = async (videoid) => {
+    return { isFave: false, isLike: true };
+}
 
 const highlightIcons = (status) => {
     if (status.isFave) highlightFaveIcon();
@@ -90,25 +171,29 @@ const highlightIcons = (status) => {
 
 const main = async () => {
     logMessage("Faves/Likes script is running");
+    logMessage(`Video ID:\t${VID_ID}`)
+    try {
+        const db = await getDatabase();
+        // console.log(db);
+        const favesPopulated = await checkStorePopulated(db, "favedVideos");
+        logMessage(`Faves store populated:\t${favesPopulated}`);
 
-    const video = document.getElementById("video");
-    if (video) {
-        logMessage(`The ID of this video is:\t${video.dataset.videoid}`);
+        if (!favesPopulated) {
+            populateFavesStore(db);
+        }
 
+        const likesPopulated = await checkStorePopulated(db, "likedVideos");
+        logMessage(`Likes store populated:\t${likesPopulated}`);
+
+        if (!likesPopulated) {
+            populateLikesStore(db);
+        }
+    } catch (err) {
+        console.trace(err);
+        return;
     }
-    const videoId = video?.dataset.videoid;
-    logMessage(`VIDEO ID:\t${videoId}`);
 
-    const { favesStorePopulated, likesStorePopulated } = await storesArePopulated();
-    if (!favesStorePopulated) {
-        populateFavesStore();
-    }
-
-    if (!likesStorePopulated) {
-        populateLikesStore();
-    }
-
-    getFaveLikeStatus(videoId).then(highlightIcons);
+    getFaveLikeStatus(VID_ID).then(highlightIcons);
 };
 
 main();
