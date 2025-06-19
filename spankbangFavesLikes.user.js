@@ -137,8 +137,17 @@ const populateFavesStore = async (db) => {
     // console.log(vids);
     const insert = new Promise((resolve, reject) => {
         const transaction = db.transaction("favedVideos", "readwrite");
+        transaction.oncomplete = function () {
+            logMessage("Populate Faves Store transaction completed.");
+            resolve();
+        };
+        transaction.onerror = function (event) {
+            logError("Populate Faves Store transaction generated an error.");
+            console.log(event);
+            console.log(transaction);
+            reject();
+        };
         const store = transaction.objectStore("favedVideos");
-        // const request = store.getAllKeys();
         for (const vid of vids) {
             store.add(vid);
             if (vid.id === VID_ID) {
