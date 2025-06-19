@@ -2,7 +2,7 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.0.5
+// @version       0.0.6
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         http*://*.spankbang.com/*-*/playlist/*
@@ -155,10 +155,10 @@ const isStorePopulated = async (db, storeName) => {
     return query;
 };
 
-const highlightFaveIcon = () => {
-    logMessage("Coloring Fave");
+const highlightFaveIcon = (status) => {
+    logMessage(`${status ? "Setting" : "Unsetting"} Fave icon.`);
     const heart = document.querySelector("div.fv > svg.i_svg.i_new-ui-heart-outlined");
-    if (heart) heart.style.fill = HIGHLIGHT_COLOR;
+    if (heart) heart.style.fill = status ? HIGHLIGHT_COLOR : "";
 };
 
 const populateFavesStore = async (db) => {
@@ -180,25 +180,17 @@ const populateFavesStore = async (db) => {
         const store = transaction.objectStore(FAVE_STORE);
         for (const vid of vids) {
             store.add(vid);
-            if (vid.id === VID_ID) {
-                highlightFaveIcon();
-            }
+            if (vid.id === VID_ID) highlightFaveIcon(true);
         }
     });
 
     return insert
 };
 
-const highlightLikeIcon = () => {
-    logMessage("Coloring Like");
+const highlightLikeIcon = (status = true) => {
+    logMessage(`${status ? "Setting" : "Unsetting"} Like icon.`);
     const checkmark = document.querySelector("span.hot > svg.i_svg.i_new-ui-checkmark-circle-outlined");
-    if (checkmark) {
-        checkmark.style.fill = HIGHLIGHT_COLOR;
-        return;
-    }
-
-    const thumbsUp = document.querySelector("span.hot > svg.i_svg.i_new-ui-thumbs-up");
-    if (thumbsUp) thumbsUp.style.fill = HIGHLIGHT_COLOR;
+    if (checkmark) checkmark.style.fill = HIGHLIGHT_COLOR;
 };
 
 const populateLikesStore = async (db) => {
@@ -221,7 +213,7 @@ const populateLikesStore = async (db) => {
         for (const vid of vids) {
             store.add(vid);
 
-            if (vid.id === VID_ID) highlightLikeIcon();
+            if (vid.id === VID_ID) highlightLikeIcon(true);
         }
     });
 
@@ -245,7 +237,7 @@ const isInStore = async (db, storeName) => {
     });
 
     return query;
-}
+};
 
 const addToStore = async (db, storeName) => {
     const video = { id: VID_ID, title: VID_TITLE };
@@ -302,7 +294,10 @@ const addListener = (icon, isSaved, db) => {
             logMessage(`Adding`)
             addToStore(db, storeName);
         }
+
         isSaved = !isSaved;
+        if (storeName === FAVE_STORE) highlightFaveIcon(isSaved);
+        if (storeName === LIKE_STORE) highlightLikeIcon(isSaved);
     });
 };
 
@@ -326,12 +321,12 @@ const main = async () => {
         const isFaved = await isInStore(db, FAVE_STORE);
         addListener(document.querySelector("div.fv"), isFaved, db);
         logMessage(`${VID_ID} ${isFaved ? "is" : "is not"} a favorite video.`);
-        if (isFaved) highlightFaveIcon();
+        if (isFaved) highlightFaveIcon(true);
 
         const isLiked = await isInStore(db, LIKE_STORE);
         addListener(document.querySelector("span.hot"), isLiked, db);
         logMessage(`${VID_ID} ${isLiked ? "is" : "is not"} a liked video.`);
-        if (isLiked) highlightLikeIcon();
+        if (isLiked) highlightLikeIcon(true);
     } catch (err) {
         console.trace(err);
         return;
