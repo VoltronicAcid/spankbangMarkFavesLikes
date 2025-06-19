@@ -11,7 +11,7 @@
 // ==/UserScript==
 
 const VID_ID = document.getElementById("video")?.dataset.videoid;
-const VID_TITLE = document.querySelector("h1.main_content_title").title;
+const VID_TITLE = document.querySelector("h1.main_content_title")?.title;
 const FAVE_STORE = "favedVideos";
 const LIKE_STORE = "likedVideos";
 const HIGHLIGHT_COLOR = "#f08e84";
