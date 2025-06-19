@@ -131,34 +131,15 @@ const getVideos = async (storeName) => {
     return videos;
 };
 
-const getFavorites = async () => {
-    let videos = [];
-
-    for await (const page of getPages(await getPlaylistUrl('favorites'))) {
-        videos = videos.concat(
-            Array.from(
-                page.getElementsByClassName("video-item"))
-                .map((div) => ({ id: div.dataset.id, title: div.querySelector("a.thumb").title })
-                )
-        );
-    }
-
-    return videos;
-};
-
-const getLikes = async () => {
-    let videos = [];
-
-    for await (const page of getPages(`${document.location.origin}/users/liked`)) {
-        videos = videos.concat(
-            Array.from(
-                page.getElementsByClassName("video-item"))
-                .map((div) => ({ id: div.dataset.id, title: div.querySelector("a.thumb").title })
-                )
-        );
-    }
-
-    return videos;
+const highlightIcon = (storeName, status) => {
+    logMessage(`${status ? "Setting" : "Unsetting"} ${storeName} icon.`);
+    const queries = {
+        [FAVE_STORE]: "div.fv > svg.i_svg.i_new-ui-heart-outlined",
+        [LATER_STORE]: "div.wl > svg.i_svg.i_new-ui-time",
+        [LIKE_STORE]: "span.hot > svg.i_svg.i_new-ui-checkmark-circle-outlined",
+    };
+    const icon = document.querySelector(queries[storeName]);
+    if (icon) icon.style.fill = status ? HIGHLIGHT_COLOR : "";
 };
 
 const isStorePopulated = async (db, storeName) => {
@@ -201,88 +182,11 @@ const populateStore = async (db, storeName) => {
         const store = transaction.objectStore(storeName);
         for (const vid of videos) {
             store.add(vid);
-            if (vid.id === VID_ID) {
-                if (storeName === FAVE_STORE) highlightFaveIcon(true);
-                if (storeName === LIKE_STORE) highlightLikeIcon(true);
-                if (storeName === LATER_STORE) { }
-            }
+            if (vid.id === VID_ID) highlightIcon(storeName, true);
         }
     });
 
     return inserts;
-};
-
-const highlightFaveIcon = (status) => {
-    logMessage(`${status ? "Setting" : "Unsetting"} Fave icon.`);
-    const heart = document.querySelector("div.fv > svg.i_svg.i_new-ui-heart-outlined");
-    if (heart) heart.style.fill = status ? HIGHLIGHT_COLOR : "";
-};
-
-const highlightLaterIcon = (status) => {
-    logMessage(`${status ? "Setting" : "Unsetting"} Later icon.`);
-    const clock = document.querySelector("div.wl > svg.i_svg.i_new-ui-time");
-    if (clock) clock.style.fill = status ? HIGHLIGHT_COLOR : "";
-};
-
-const populateFavesStore = async (db) => {
-    logMessage("Populating favorites");
-    // const vids = await getFavorites();
-    const vids = await getVideos(FAVE_STORE);
-
-    const insert = new Promise((resolve, reject) => {
-        const transaction = db.transaction(FAVE_STORE, "readwrite");
-        transaction.oncomplete = function () {
-            logMessage("Populate Faves Store transaction completed.");
-            resolve();
-        };
-        transaction.onerror = function (event) {
-            logError("Populate Faves Store transaction generated an error.");
-            console.log(event);
-            console.log(transaction);
-            reject();
-        };
-        const store = transaction.objectStore(FAVE_STORE);
-        for (const vid of vids) {
-            store.add(vid);
-            if (vid.id === VID_ID) highlightFaveIcon(true);
-        }
-    });
-
-    return insert
-};
-
-const highlightLikeIcon = (status = true) => {
-    logMessage(`${status ? "Setting" : "Unsetting"} Like icon.`);
-    const checkmark = document.querySelector("span.hot > svg.i_svg.i_new-ui-checkmark-circle-outlined");
-    if (checkmark) checkmark.style.fill = HIGHLIGHT_COLOR;
-};
-
-const populateLikesStore = async (db) => {
-    logMessage("Populating likes");
-    // const vids = await getLikes();
-    const vids = await getVideos(LIKE_STORE);
-
-    const insert = new Promise((resolve, reject) => {
-        const transaction = db.transaction(LIKE_STORE, "readwrite");
-        transaction.oncomplete = function () {
-            logMessage("Populate Likes Store transaction completed.");
-            resolve();
-        };
-        transaction.onerror = function (event) {
-            logError("Populate Likes Store transaction generated an error.");
-            console.log(event);
-            console.log(transaction);
-            reject();
-        };
-        const store = transaction.objectStore(LIKE_STORE);
-        for (const vid of vids) {
-            store.add(vid);
-
-            if (vid.id === VID_ID) highlightLikeIcon(true);
-        }
-    });
-
-    return insert;
 };
 
 const isInStore = async (db, storeName) => {
@@ -361,9 +265,7 @@ const addListener = (icon, isSaved, db) => {
         }
 
         isSaved = !isSaved;
-        if (storeName === FAVE_STORE) highlightFaveIcon(isSaved);
-        if (storeName === LIKE_STORE) highlightLikeIcon(isSaved);
-        if (storeName === LATER_STORE) highlightLaterIcon(isSaved);
+        highlightIcon(storeName, isSaved);
     });
 };
 
@@ -377,11 +279,6 @@ const main = async () => {
         [LIKE_STORE]: document.querySelector("span.hot"),
         [LATER_STORE]: document.querySelector("div.wl"),
     };
-    const highlightFunctions = {
-        [FAVE_STORE]: highlightFaveIcon,
-        [LIKE_STORE]: highlightLikeIcon,
-        [LATER_STORE]: highlightLaterIcon,
-    };
 
     try {
         const db = await getDatabase();
@@ -394,33 +291,8 @@ const main = async () => {
             const inStore = await isInStore(db, storeName);
             logMessage(`${VID_ID} ${inStore ? "is" : "is not"} in "${storeName}" store.`);
             addListener(iconDivs[storeName], inStore, db);
-            if (inStore) {
-                console.log("TODO:\t Add generic highlight icon function.");
-                highlightFunctions[storeName](true);
-            }
+            if (inStore) highlightIcon(storeName, true);
         }
-
-        // const favesPopulated = await isStorePopulated(db, FAVE_STORE);
-        // logMessage(`Faves store populated:\t${favesPopulated}`);
-
-        // // if (!favesPopulated) populateFavesStore(db);
-        // if (!favesPopulated) populateStore(db, FAVE_STORE);
-
-        // const likesPopulated = await isStorePopulated(db, LIKE_STORE);
-        // logMessage(`Likes store populated:\t${likesPopulated}`);
-
-        // // if (!likesPopulated) populateLikesStore(db);
-        // if (!likesPopulated) populateStore(db, LIKE_STORE);
-
-        // const isFaved = await isInStore(db, FAVE_STORE);
-        // addListener(document.querySelector("div.fv"), isFaved, db);
-        // logMessage(`${VID_ID} ${isFaved ? "is" : "is not"} a favorite video.`);
-        // if (isFaved) highlightFaveIcon(true);
-
-        // const isLiked = await isInStore(db, LIKE_STORE);
-        // addListener(document.querySelector("span.hot"), isLiked, db);
-        // logMessage(`${VID_ID} ${isLiked ? "is" : "is not"} a liked video.`);
-        // if (isLiked) highlightLikeIcon(true);
     } catch (err) {
         console.trace(err);
         return;
