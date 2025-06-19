@@ -2,7 +2,7 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.0.4
+// @version       0.0.5
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         http*://*.spankbang.com/*-*/playlist/*
@@ -11,6 +11,7 @@
 // ==/UserScript==
 
 const VID_ID = document.getElementById("video")?.dataset.videoid;
+const VID_TITLE = document.querySelector("h1.main_content_title").title;
 const FAVE_STORE = "favedVideos";
 const LIKE_STORE = "likedVideos";
 const HIGHLIGHT_COLOR = "#f08e84";
@@ -246,9 +247,69 @@ const isInStore = async (db, storeName) => {
     return query;
 }
 
+const addToStore = async (db, storeName) => {
+    const video = { id: VID_ID, title: VID_TITLE };
+
+    const insert = new Promise((resolve, reject) => {
+        logMessage(`Adding ${VID_ID} to ${storeName}.`);
+        const transaction = db.transaction(storeName, "readwrite");
+        const store = transaction.objectStore(storeName);
+
+        const request = store.put(video);
+        request.onsuccess = function () {
+            logMessage(`Successfully added ${VID_ID}.`);
+            resolve();
+        };
+        request.onerror = function () {
+            logError(`Error with put request on store ${storeName}`);
+            reject(request.error);
+        };
+    });
+
+    return insert;
+};
+
+const removeFromStore = async (db, storeName) => {
+    const remove = new Promise((resolve, reject) => {
+        logMessage(`Removing ${VID_ID} from ${storeName}.`);
+        const transaction = db.transaction(storeName, "readwrite");
+        const store = transaction.objectStore(storeName);
+
+        const request = store.delete(VID_ID);
+        request.onsuccess = function () {
+            logMessage(`Successfully deleted ${VID_ID}.`);
+            resolve();
+        };
+        request.onerror = function () {
+            logError(`Error with delete request on store ${storeName}`);
+            reject(request.error);
+        };
+    });
+
+    return remove;
+};
+
+const addListener = (icon, isSaved, db) => {
+    const classStore = { hot: LIKE_STORE, fv: FAVE_STORE };
+    const storeName = classStore[icon.className];
+    logMessage(`${icon.className} = ${storeName}`);
+
+    icon.addEventListener("click", () => {
+        if (isSaved) {
+            logMessage('Removing');
+            removeFromStore(db, storeName);
+        } else {
+            logMessage(`Adding`)
+            addToStore(db, storeName);
+        }
+        isSaved = !isSaved;
+    });
+};
+
 const main = async () => {
     logMessage("Faves/Likes script is running");
-    logMessage(`Video ID:\t${VID_ID}`);
+    logMessage(`Vid Title:\t${VID_TITLE}`);
+    logMessage(`Video ID :\t${VID_ID}`);
 
     try {
         const db = await getDatabase();
@@ -263,10 +324,12 @@ const main = async () => {
         if (!likesPopulated) populateLikesStore(db);
 
         const isFaved = await isInStore(db, FAVE_STORE);
+        addListener(document.querySelector("div.fv"), isFaved, db);
         logMessage(`${VID_ID} ${isFaved ? "is" : "is not"} a favorite video.`);
         if (isFaved) highlightFaveIcon();
 
         const isLiked = await isInStore(db, LIKE_STORE);
+        addListener(document.querySelector("span.hot"), isLiked, db);
         logMessage(`${VID_ID} ${isLiked ? "is" : "is not"} a liked video.`);
         if (isLiked) highlightLikeIcon();
     } catch (err) {
