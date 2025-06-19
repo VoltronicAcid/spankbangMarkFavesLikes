@@ -2,7 +2,7 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.0.6
+// @version       0.0.7
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         http*://*.spankbang.com/*-*/playlist/*
@@ -12,8 +12,9 @@
 
 const VID_ID = document.getElementById("video")?.dataset.videoid;
 const VID_TITLE = document.querySelector("h1.main_content_title")?.title;
-const FAVE_STORE = "favedVideos";
-const LIKE_STORE = "likedVideos";
+const FAVE_STORE = "favorites";
+const LIKE_STORE = "likes";
+const LATER_STORE = "watchLater";
 const HIGHLIGHT_COLOR = "#f08e84";
 
 const logMessage = (msg) => {
@@ -35,10 +36,13 @@ const getDatabase = async () => {
             const { result: db } = openRequest;
 
             const favesStore = db.createObjectStore(FAVE_STORE, { keyPath: "id" });
-            favesStore.createIndex("faveIndex", "id", { unique: true });
+            favesStore.createIndex("faveIdx", "id", { unique: true });
 
             const likesStore = db.createObjectStore(LIKE_STORE, { keyPath: "id" });
-            likesStore.createIndex("likeIndex", "id", { unique: true });
+            likesStore.createIndex("likeIdx", "id", { unique: true });
+
+            const laterStore = db.createObjectStore(LATER_STORE, { keyPath: "id" });
+            laterStore.createIndex("laterIdx", "id", { unique: true });
         };
 
         openRequest.onsuccess = function () {
