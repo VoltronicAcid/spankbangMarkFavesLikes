@@ -25,7 +25,7 @@ const getDatabase = async (config) => {
         const openRequest = indexedDB.open(config.name, 1);
 
         openRequest.onupgradeneeded = function () {
-            logMessage("Upgrading/Installing database");
+            // logMessage("Upgrading/Installing database");
             const { result: db } = openRequest;
 
             for (const [name, { keyPath, unique }] of Object.entries(config.stores)) {
@@ -35,10 +35,10 @@ const getDatabase = async (config) => {
         };
 
         openRequest.onsuccess = function () {
-            logMessage("Opened database successfully.");
+            // logMessage("Opened database successfully.");
             const { result: db } = openRequest;
             db.onclose = function () {
-                logMessage("Database closed.");
+                // logMessage("Database closed.");
             }
             db.onerror = function () {
                 logError("Database error.");
@@ -61,7 +61,7 @@ const getDatabase = async (config) => {
 async function* getPages(url) {
     while (url) {
         try {
-            logMessage(`Fetching URL:\t${url}`);
+            // logMessage(`Fetching URL:\t${url}`);
             const response = await fetch(url);
             if (response.ok) {
                 const html = await response.text();
@@ -81,7 +81,7 @@ async function* getPages(url) {
 };
 
 const getPlaylistUrl = async (name) => {
-    logMessage(`Getting link for "${name}".`);
+    // logMessage(`Getting link for "${name}".`);
     const query = `a.playlist-item[href$="/${name}/"]`;
 
     try {
@@ -133,7 +133,7 @@ const highlightIcon = (storeName) => {
 };
 
 const populateStore = async (db, storeName) => {
-    logMessage(`Populating ${storeName} store.`);
+    // logMessage(`Populating ${storeName} store.`);
     const videos = await getVideos(storeName);
 
     const inserts = new Promise((resolve, reject) => {
@@ -141,7 +141,7 @@ const populateStore = async (db, storeName) => {
         const store = transaction.objectStore(storeName);
 
         transaction.oncomplete = function () {
-            logMessage(`Completed populating "${storeName}" store.`);
+            // logMessage(`Completed populating "${storeName}" store.`);
             localStorage.setItem("lastPopulated", new Date().getTime());
             resolve();
         };
@@ -160,7 +160,7 @@ const populateStore = async (db, storeName) => {
 
 const isInStore = async (db, storeName, video) => {
     const query = new Promise((resolve, reject) => {
-        logMessage(`Checking "${storeName}" for ${video.id}`);
+        // logMessage(`Checking "${storeName}" for ${video.id}`);
         const transaction = db.transaction(storeName, "readonly");
         const store = transaction.objectStore(storeName);
 
@@ -179,7 +179,7 @@ const isInStore = async (db, storeName, video) => {
 
 const addRemoveVideo = async (db, storeName, video) => {
     const toggle = new Promise((resolve, reject) => {
-        logMessage(`Toggling ${video.id} from ${storeName}`);
+        // logMessage(`Toggling ${video.id} from ${storeName}`);
         const transaction = db.transaction(storeName, "readwrite");
         const store = transaction.objectStore(storeName);
 
@@ -188,7 +188,7 @@ const addRemoveVideo = async (db, storeName, video) => {
             if (!getRequest.result) {
                 const addRequest = store.add(video);
                 addRequest.onsuccess = function () {
-                    logMessage(`Added ${JSON.stringify(video)} to ${storeName}`);
+                    // logMessage(`Added ${JSON.stringify(video)} to ${storeName}`);
                     resolve(addRequest.result);
                 };
                 addRequest.onerror = function () {
@@ -198,7 +198,7 @@ const addRemoveVideo = async (db, storeName, video) => {
             } else {
                 const deleteRequest = store.delete(video.id);
                 deleteRequest.onsuccess = function () {
-                    logMessage(`Deleted ${JSON.stringify(video)} from ${storeName}`);
+                    // logMessage(`Deleted ${JSON.stringify(video)} from ${storeName}`);
                     resolve(deleteRequest.result);
                 };
                 deleteRequest.onerror = function () {
@@ -258,7 +258,7 @@ const main = async () => {
         for (const storeName in DB_CONFIG.stores) {
             addIconListener(db, storeName, video);
             const inStore = await isInStore(db, storeName, video);
-            logMessage(`${video.id} ${inStore ? "IS" : "is NOT"} in "${storeName}" store.`);
+            // logMessage(`${video.id} ${inStore ? "IS" : "is NOT"} in "${storeName}" store.`);
             if (inStore) highlightIcon(storeName);
         }
     } catch (err) {
