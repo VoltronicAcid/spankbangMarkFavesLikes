@@ -2,20 +2,13 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.0.7
+// @version       0.0.8
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         http*://*.spankbang.com/*-*/playlist/*
 // @match         http*://*.spankbang.com/*/video/*
 // @run-at        document-idle
 // ==/UserScript==
-
-const VID_ID = document.getElementById("video")?.dataset.videoid;
-const VID_TITLE = document.querySelector("h1.main_content_title")?.title;
-const FAVE_STORE = "favorites";
-const LIKE_STORE = "likes";
-const LATER_STORE = "watchLater";
-const HIGHLIGHT_COLOR = "#f08e84";
 
 const logMessage = (msg) => {
     const logStyle = "background-color:aliceblue; color:darkblue; font-size: 12pt; padding: 5px";
@@ -27,22 +20,18 @@ const logError = (msg) => {
     console.log(`%c${msg}`, logStyle);
 };
 
-const getDatabase = async () => {
+const getDatabase = async (config) => {
     const databasePromise = new Promise((resolve, reject) => {
-        const openRequest = indexedDB.open("FavesLikes", 1);
+        const openRequest = indexedDB.open(config.name, 1);
 
         openRequest.onupgradeneeded = function () {
             logMessage("Upgrading/Installing database");
             const { result: db } = openRequest;
 
-            const favesStore = db.createObjectStore(FAVE_STORE, { keyPath: "id" });
-            favesStore.createIndex("faveIdx", "id", { unique: true });
-
-            const likesStore = db.createObjectStore(LIKE_STORE, { keyPath: "id" });
-            likesStore.createIndex("likeIdx", "id", { unique: true });
-
-            const laterStore = db.createObjectStore(LATER_STORE, { keyPath: "id" });
-            laterStore.createIndex("laterIdx", "id", { unique: true });
+            for (const [name, { keyPath, unique }] of Object.entries(config.stores)) {
+                const store = db.createObjectStore(name, { keyPath });
+                store.createIndex(keyPath, keyPath, { unique });
+            }
         };
 
         openRequest.onsuccess = function () {
@@ -113,9 +102,9 @@ const getPlaylistUrl = async (name) => {
 const getVideos = async (storeName) => {
     let videos = [];
     const listUrls = {
-        [LIKE_STORE]: () => `${document.location.origin}/users/liked`,
-        [FAVE_STORE]: async () => await getPlaylistUrl('favorites'),
-        [LATER_STORE]: async () => await getPlaylistUrl('watch+later'),
+        "likes": () => `${document.location.origin}/users/liked`,
+        "favorites": async () => await getPlaylistUrl('favorites'),
+        "watchLater": async () => await getPlaylistUrl('watch+later'),
     };
     const url = await listUrls[storeName]();
 
@@ -131,35 +120,16 @@ const getVideos = async (storeName) => {
     return videos;
 };
 
-const highlightIcon = (storeName, status) => {
-    logMessage(`${status ? "Setting" : "Unsetting"} ${storeName} icon.`);
+const highlightIcon = (storeName) => {
+    const HIGHLIGHT_COLOR = "#f08e84";
     const queries = {
-        [FAVE_STORE]: "div.fv > svg.i_svg.i_new-ui-heart-outlined",
-        [LATER_STORE]: "div.wl > svg.i_svg.i_new-ui-time",
-        [LIKE_STORE]: "span.hot > svg.i_svg.i_new-ui-checkmark-circle-outlined",
+        "favorites": "div.fv > svg.i_svg.i_new-ui-heart-outlined",
+        "watchLater": "div.wl > svg.i_svg.i_new-ui-time",
+        "likes": "span.hot > svg.i_svg.i_new-ui-checkmark-circle-outlined",
     };
     const icon = document.querySelector(queries[storeName]);
-    if (icon) icon.style.fill = status ? HIGHLIGHT_COLOR : "";
-};
 
-const isStorePopulated = async (db, storeName) => {
-    const query = new Promise((resolve, reject) => {
-        logMessage(`Checking if ${storeName} is populated.`);
-        const transaction = db.transaction(storeName, "readonly");
-        const store = transaction.objectStore(storeName);
-
-        const request = store.getAllKeys();
-        request.onsuccess = function () {
-            const { result: keys } = request;
-            resolve(keys.length > 0);
-        };
-        request.onerror = function () {
-            logError(`Error with request on store ${storeName}`);
-            reject(request.error);
-        };
-    });
-
-    return query;
+    if (icon) icon.style.fill = icon.style.fill ? "" : HIGHLIGHT_COLOR;
 };
 
 const populateStore = async (db, storeName) => {
@@ -168,8 +138,11 @@ const populateStore = async (db, storeName) => {
 
     const inserts = new Promise((resolve, reject) => {
         const transaction = db.transaction(storeName, "readwrite");
+        const store = transaction.objectStore(storeName);
+
         transaction.oncomplete = function () {
             logMessage(`Completed populating "${storeName}" store.`);
+            localStorage.setItem("lastPopulated", new Date().getTime());
             resolve();
         };
         transaction.onerror = function (event) {
@@ -179,23 +152,19 @@ const populateStore = async (db, storeName) => {
             reject();
         };
 
-        const store = transaction.objectStore(storeName);
-        for (const vid of videos) {
-            store.add(vid);
-            if (vid.id === VID_ID) highlightIcon(storeName, true);
-        }
+        for (const vid of videos) store.put(vid);
     });
 
     return inserts;
 };
 
-const isInStore = async (db, storeName) => {
+const isInStore = async (db, storeName, video) => {
     const query = new Promise((resolve, reject) => {
-        logMessage(`Checking ${storeName} for ${VID_ID}`);
+        logMessage(`Checking "${storeName}" for ${video.id}`);
         const transaction = db.transaction(storeName, "readonly");
         const store = transaction.objectStore(storeName);
 
-        const request = store.get(VID_ID);
+        const request = store.get(video.id);
         request.onsuccess = function () {
             resolve(request.result !== undefined);
         };
@@ -208,90 +177,89 @@ const isInStore = async (db, storeName) => {
     return query;
 };
 
-const addToStore = async (db, storeName) => {
-    const video = { id: VID_ID, title: VID_TITLE };
-
-    const insert = new Promise((resolve, reject) => {
-        logMessage(`Adding ${VID_ID} to ${storeName}.`);
+const addRemoveVideo = async (db, storeName, video) => {
+    const toggle = new Promise((resolve, reject) => {
+        logMessage(`Toggling ${video.id} from ${storeName}`);
         const transaction = db.transaction(storeName, "readwrite");
         const store = transaction.objectStore(storeName);
 
-        const request = store.put(video);
-        request.onsuccess = function () {
-            logMessage(`Successfully added ${VID_ID}.`);
-            resolve();
-        };
-        request.onerror = function () {
-            logError(`Error with put request on store ${storeName}`);
-            reject(request.error);
-        };
-    });
-
-    return insert;
-};
-
-const removeFromStore = async (db, storeName) => {
-    const remove = new Promise((resolve, reject) => {
-        logMessage(`Removing ${VID_ID} from ${storeName}.`);
-        const transaction = db.transaction(storeName, "readwrite");
-        const store = transaction.objectStore(storeName);
-
-        const request = store.delete(VID_ID);
-        request.onsuccess = function () {
-            logMessage(`Successfully deleted ${VID_ID}.`);
-            resolve();
-        };
-        request.onerror = function () {
-            logError(`Error with delete request on store ${storeName}`);
-            reject(request.error);
-        };
-    });
-
-    return remove;
-};
-
-const addListener = (icon, isSaved, db) => {
-    const classStore = { hot: LIKE_STORE, fv: FAVE_STORE, wl: LATER_STORE, };
-    const storeName = classStore[icon.className];
-    logMessage(`${icon.className} = ${storeName}`);
-
-    icon.addEventListener("click", () => {
-        if (isSaved) {
-            logMessage('Removing');
-            removeFromStore(db, storeName);
-        } else {
-            logMessage(`Adding`)
-            addToStore(db, storeName);
+        const getRequest = store.get(video.id);
+        getRequest.onsuccess = function () {
+            if (!getRequest.result) {
+                const addRequest = store.add(video);
+                addRequest.onsuccess = function () {
+                    logMessage(`Added ${JSON.stringify(video)} to ${storeName}`);
+                    resolve(addRequest.result);
+                };
+                addRequest.onerror = function () {
+                    logError(`Unable to add ${JSON.stringify(video)} to ${storeName}`);
+                    reject(addRequest.error);
+                };
+            } else {
+                const deleteRequest = store.delete(video.id);
+                deleteRequest.onsuccess = function () {
+                    logMessage(`Deleted ${JSON.stringify(video)} from ${storeName}`);
+                    resolve(deleteRequest.result);
+                };
+                deleteRequest.onerror = function () {
+                    logError(`Unable to delete ${JSON.stringify(video)} from ${storeName}`);
+                    reject(deleteRequest.error);
+                }
+            }
         }
-
-        isSaved = !isSaved;
-        highlightIcon(storeName, isSaved);
+        getRequest.onerror = function () {
+            logError(`Get request for ${JSON.stringify(video)} from ${storeName} failed`);
+            reject(getRequest.error);
+        }
     });
+
+    return toggle;
+};
+
+const addIconListener = (db, storeName, video) => {
+    const iconQueries = {
+        "favorites": "div.fv",
+        "watchLater": "div.wl",
+        "likes": "span.hot",
+    };
+    const icon = document.querySelector(iconQueries[storeName]);
+
+    icon.addEventListener("click", async () => {
+        await addRemoveVideo(db, storeName, video);
+        highlightIcon(storeName);
+    });
+
+    return;
 };
 
 const main = async () => {
-    logMessage("Faves/Likes script is running");
-    logMessage(`Vid Title:\t${VID_TITLE}`);
-    logMessage(`Video ID :\t${VID_ID}`);
-    const stores = [FAVE_STORE, LIKE_STORE, LATER_STORE];
-    const iconDivs = {
-        [FAVE_STORE]: document.querySelector("div.fv"),
-        [LIKE_STORE]: document.querySelector("span.hot"),
-        [LATER_STORE]: document.querySelector("div.wl"),
+    const video = {
+        id: document.getElementById("video")?.dataset.videoid,
+        title: document.querySelector("h1.main_content_title")?.title,
+    };
+
+    const DB_CONFIG = {
+        name: "Videos",
+        stores: {
+            "favorites": { keyPath: "id", unique: true, },
+            "watchLater": { keyPath: "id", unique: true, },
+            "likes": { keyPath: "id", unique: true, },
+        },
     };
 
     try {
-        const db = await getDatabase();
+        const db = await getDatabase(DB_CONFIG);
+        const lastPopulated = localStorage.getItem("lastPopulated");
 
-        for (const storeName of stores) {
-            const isPopulated = await isStorePopulated(db, storeName);
-            logMessage(`"${storeName}" ${isPopulated ? "is already" : "is not"} populated.`);
-            if (!isPopulated) populateStore(db, storeName);
+        if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
+            Promise.allSettled(Object.keys(DB_CONFIG.stores).map((storeName) => populateStore(db, storeName)));
+        }
 
-            const inStore = await isInStore(db, storeName);
-            logMessage(`${VID_ID} ${inStore ? "is" : "is not"} in "${storeName}" store.`);
-            addListener(iconDivs[storeName], inStore, db);
-            if (inStore) highlightIcon(storeName, true);
+        for (const storeName in DB_CONFIG.stores) {
+            addIconListener(db, storeName, video);
+            const inStore = await isInStore(db, storeName, video);
+            logMessage(`${video.id} ${inStore ? "IS" : "is NOT"} in "${storeName}" store.`);
+            if (inStore) highlightIcon(storeName);
         }
     } catch (err) {
         console.trace(err);
