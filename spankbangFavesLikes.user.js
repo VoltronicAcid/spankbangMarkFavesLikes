@@ -2,11 +2,11 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.0.8
+// @version       0.1.1
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
-// @match         http*://*.spankbang.com/*-*/playlist/*
-// @match         http*://*.spankbang.com/*/video/*
+// @match         https://spankbang.com/*
+// @match         https://*.spankbang.com/*
 // @run-at        document-idle
 // ==/UserScript==
 
@@ -38,7 +38,7 @@ const getDatabase = async (config) => {
             // logMessage("Opened database successfully.");
             const { result: db } = openRequest;
             db.onclose = function () {
-                // logMessage("Database closed.");
+                logMessage("Database closed.");
             }
             db.onerror = function () {
                 logError("Database error.");
@@ -99,8 +99,13 @@ const getPlaylistUrl = async (name) => {
     }
 };
 
+const divToVideo = (videoDiv) => {
+    const link = videoDiv.querySelector("a[title]");
+
+    if (link) return { id: videoDiv.dataset.id, title: link.title, };
+};
+
 const getVideos = async (storeName) => {
-    let videos = [];
     const listUrls = {
         "likes": () => `${document.location.origin}/users/liked`,
         "favorites": async () => await getPlaylistUrl('favorites'),
@@ -108,12 +113,13 @@ const getVideos = async (storeName) => {
     };
     const url = await listUrls[storeName]();
 
+    let videos = [];
     for await (const page of getPages(url)) {
         videos = videos.concat(
             Array.from(
                 page.getElementsByClassName("video-item"))
-                .map((div) => ({ id: div.dataset.id, title: div.querySelector("a.thumb").title })
-                )
+                // .map((div) => ({ id: div.dataset.id, title: div.querySelector("a[title]").title }))
+                .map(divToVideo)
         );
     }
 
@@ -142,7 +148,6 @@ const populateStore = async (db, storeName) => {
 
         transaction.oncomplete = function () {
             // logMessage(`Completed populating "${storeName}" store.`);
-            localStorage.setItem("lastPopulated", new Date().getTime());
             resolve();
         };
         transaction.onerror = function (event) {
@@ -152,7 +157,10 @@ const populateStore = async (db, storeName) => {
             reject();
         };
 
-        for (const vid of videos) store.put(vid);
+        for (const video of videos) {
+            // logMessage(`Putting ${video.title} into ${storeName} store.`);
+            store.put(video);
+        }
     });
 
     return inserts;
@@ -185,17 +193,7 @@ const addRemoveVideo = async (db, storeName, video) => {
 
         const getRequest = store.get(video.id);
         getRequest.onsuccess = function () {
-            if (!getRequest.result) {
-                const addRequest = store.add(video);
-                addRequest.onsuccess = function () {
-                    // logMessage(`Added ${JSON.stringify(video)} to ${storeName}`);
-                    resolve(addRequest.result);
-                };
-                addRequest.onerror = function () {
-                    logError(`Unable to add ${JSON.stringify(video)} to ${storeName}`);
-                    reject(addRequest.error);
-                };
-            } else {
+            if (getRequest.result) {
                 const deleteRequest = store.delete(video.id);
                 deleteRequest.onsuccess = function () {
                     // logMessage(`Deleted ${JSON.stringify(video)} from ${storeName}`);
@@ -205,6 +203,16 @@ const addRemoveVideo = async (db, storeName, video) => {
                     logError(`Unable to delete ${JSON.stringify(video)} from ${storeName}`);
                     reject(deleteRequest.error);
                 }
+            } else {
+                const addRequest = store.add(video);
+                addRequest.onsuccess = function () {
+                    // logMessage(`Added ${JSON.stringify(video)} to ${storeName}`);
+                    resolve(addRequest.result);
+                };
+                addRequest.onerror = function () {
+                    logError(`Unable to add ${JSON.stringify(video)} to ${storeName}`);
+                    reject(addRequest.error);
+                };
             }
         }
         getRequest.onerror = function () {
@@ -232,13 +240,69 @@ const addIconListener = (db, storeName, video) => {
     return;
 };
 
-const main = async () => {
+const getPopoutMenuEventHandler = (db, storeName, video) => {
+    const handler = async function () {
+        if (video) await addRemoveVideo(db, storeName, video);
+    };
+
+    return handler;
+};
+
+const updatePopoutMenu = (config) => {
+    const { db } = config;
+    const popoutMenu = document.getElementById("popout_menu");
+
+    if (popoutMenu) {
+        const videoDivs = document.querySelectorAll("div.video-item");
+        if (videoDivs.length) {
+
+            videoDivs.forEach((videoDiv) => {
+                const video = divToVideo(videoDiv);
+                const watchLaterMenuHandler = getPopoutMenuEventHandler(db, "watchLater", video);
+                const favoritesMenuHandler = getPopoutMenuEventHandler(db, "favorites", video);
+
+                const menuSpan = videoDiv.querySelector("span.show-items-menu-trigger");
+                if (!menuSpan) return;
+
+                const innerSpan = menuSpan.querySelector("span.items-center");
+
+                const spanObserver = new MutationObserver((mutationRecords) => {
+                    const watchIcon = popoutMenu.querySelector(".b.wl");
+                    const favIcon = popoutMenu.querySelector(".b.fav");
+                    for (const record of mutationRecords) {
+                        if (record.type === "attributes" && record.target.ariaSelected === "true") {
+                            watchIcon.addEventListener("click", watchLaterMenuHandler);
+                            favIcon.addEventListener("click", favoritesMenuHandler);
+                        } else if (record.type === "attributes" && record.target.ariaSelected === "false") {
+                            watchIcon.removeEventListener("click", watchLaterMenuHandler);
+                            favIcon.removeEventListener("click", favoritesMenuHandler);
+                        }
+                    }
+                });
+                spanObserver.observe(innerSpan, { attributes: true, });
+            });
+        }
+    }
+};
+
+const updateVideoIcons = async (config) => {
+    const { db, stores } = config;
     const video = {
         id: document.getElementById("video")?.dataset.videoid,
         title: document.querySelector("h1.main_content_title")?.title,
     };
 
+    for (const storeName in stores) {
+        addIconListener(db, storeName, video);
+        const inStore = await isInStore(db, storeName, video);
+        // logMessage(`${video.id} ${inStore ? "IS" : "is NOT"} in "${storeName}" store.`);
+        if (inStore) highlightIcon(storeName);
+    }
+};
+
+const main = async () => {
     const DB_CONFIG = {
+        db: null,
         name: "Videos",
         stores: {
             "favorites": { keyPath: "id", unique: true, },
@@ -248,18 +312,20 @@ const main = async () => {
     };
 
     try {
-        const db = await getDatabase(DB_CONFIG);
+        DB_CONFIG.db = await getDatabase(DB_CONFIG);
+        localStorage.removeItem("lastPopulated");
         const lastPopulated = localStorage.getItem("lastPopulated");
 
         if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
-            Promise.allSettled(Object.keys(DB_CONFIG.stores).map((storeName) => populateStore(db, storeName)));
+            await Promise.allSettled(Object.keys(DB_CONFIG.stores).map((storeName) => populateStore(DB_CONFIG.db, storeName)));
+            localStorage.setItem("lastPopulated", new Date().getTime());
         }
 
-        for (const storeName in DB_CONFIG.stores) {
-            addIconListener(db, storeName, video);
-            const inStore = await isInStore(db, storeName, video);
-            // logMessage(`${video.id} ${inStore ? "IS" : "is NOT"} in "${storeName}" store.`);
-            if (inStore) highlightIcon(storeName);
+        updatePopoutMenu(DB_CONFIG);
+
+        const videoPlayer = document.querySelector("video#main_video_player_html5_api");
+        if (videoPlayer) {
+            updateVideoIcons(DB_CONFIG);
         }
     } catch (err) {
         console.trace(err);
