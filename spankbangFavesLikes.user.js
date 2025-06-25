@@ -339,7 +339,6 @@ const main = async () => {
 
     try {
         DB_CONFIG.db = await getDatabase(DB_CONFIG);
-        localStorage.removeItem("lastPopulated");
         const lastPopulated = localStorage.getItem("lastPopulated");
 
         if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
