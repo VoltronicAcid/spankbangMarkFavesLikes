@@ -255,7 +255,6 @@ const updatePopoutMenu = (config) => {
     if (popoutMenu) {
         const videoDivs = document.querySelectorAll("div.video-item");
         if (videoDivs.length) {
-
             videoDivs.forEach((videoDiv) => {
                 const video = divToVideo(videoDiv);
                 const watchLaterMenuHandler = getPopoutMenuEventHandler(db, "watchLater", video);
@@ -282,6 +281,33 @@ const updatePopoutMenu = (config) => {
                 spanObserver.observe(innerSpan, { attributes: true, });
             });
         }
+
+        const popoutMenuObserver = new MutationObserver((records) => {
+            for (const mutation of records) {
+                if (mutation.target.style.display === "block") {
+                    setTimeout(async () => {
+                        const span = document.querySelector("span[aria-selected=true]");
+                        const watchIcon = popoutMenu.querySelector(".b.wl");
+                        const favIcon = popoutMenu.querySelector(".b.fav");
+                        watchIcon.firstElementChild.style.fill = "";
+                        favIcon.firstElementChild.style.fill = "";
+
+                        const videoDiv = span.closest("div.video-item");
+                        const video = divToVideo(videoDiv);
+
+                        if (await isInStore(db, "watchLater", video)) watchIcon.firstElementChild.style.fill = "#f08e84";
+                        if (await isInStore(db, "favorites", video)) favIcon.firstElementChild.style.fill = "#f08e84";
+
+                    }, 300);
+                } else if (mutation.target.style.display === "none") {
+                    const watchIcon = popoutMenu.querySelector(".b.wl");
+                    const favIcon = popoutMenu.querySelector(".b.fav");
+                    watchIcon.firstElementChild.style.fill = "";
+                    favIcon.firstElementChild.style.fill = "";
+                }
+            }
+        });
+        popoutMenuObserver.observe(popoutMenu, { attributes: true, childList: true, subtree: true, });
     }
 };
 
