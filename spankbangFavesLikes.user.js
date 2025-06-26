@@ -2,7 +2,7 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.1.1
+// @version       0.1.2
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         https://spankbang.com/*
@@ -328,7 +328,7 @@ const updateVideoIcons = async (config) => {
 
 const main = async () => {
     const DB_CONFIG = {
-        db: null,
+        db: undefined,
         name: "Videos",
         stores: {
             "favorites": { keyPath: "id", unique: true, },
