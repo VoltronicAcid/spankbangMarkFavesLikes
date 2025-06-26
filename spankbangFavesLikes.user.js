@@ -327,7 +327,7 @@ const updateVideoIcons = async (config) => {
 };
 
 const main = async () => {
-    const DB_CONFIG = {
+    const CONFIG = {
         db: undefined,
         name: "Videos",
         stores: {
@@ -338,19 +338,19 @@ const main = async () => {
     };
 
     try {
-        DB_CONFIG.db = await getDatabase(DB_CONFIG);
+        CONFIG.db = await getDatabase(CONFIG);
         const lastPopulated = localStorage.getItem("lastPopulated");
 
         if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
-            await Promise.allSettled(Object.keys(DB_CONFIG.stores).map((storeName) => populateStore(DB_CONFIG.db, storeName)));
+            await Promise.allSettled(Object.keys(CONFIG.stores).map((storeName) => populateStore(CONFIG.db, storeName)));
             localStorage.setItem("lastPopulated", new Date().getTime());
         }
 
-        updatePopoutMenu(DB_CONFIG);
+        updatePopoutMenu(CONFIG);
 
         const videoPlayer = document.querySelector("video#main_video_player_html5_api");
         if (videoPlayer) {
-            updateVideoIcons(DB_CONFIG);
+            updateVideoIcons(CONFIG);
         }
     } catch (err) {
         console.trace(err);
