@@ -20,9 +20,12 @@ const logError = (msg) => {
     console.log(`%c${msg}`, logStyle);
 };
 
-const getDatabase = async (config) => {
-    const databasePromise = new Promise((resolve, reject) => {
-        const openRequest = indexedDB.open(config.name, 1);
+const openDatabase = async (config) => {
+    const name = "Videos";
+    const version = 1;
+
+    return new Promise((resolve, reject) => {
+        const openRequest = indexedDB.open(name, version);
 
         openRequest.onupgradeneeded = function () {
             // logMessage("Upgrading/Installing database");
@@ -36,6 +39,7 @@ const getDatabase = async (config) => {
 
         openRequest.onsuccess = function () {
             // logMessage("Opened database successfully.");
+            config.db = openRequest.result;
             const { result: db } = openRequest;
             db.onclose = function () {
                 logMessage("Database closed.");
@@ -54,8 +58,6 @@ const getDatabase = async (config) => {
             reject(message);
         }
     });
-
-    return databasePromise;
 };
 
 async function* getPages(url) {
@@ -329,7 +331,6 @@ const updateVideoIcons = async (config) => {
 const main = async () => {
     const CONFIG = {
         db: undefined,
-        name: "Videos",
         stores: {
             "favorites": { keyPath: "id", unique: true, },
             "watchLater": { keyPath: "id", unique: true, },
@@ -338,7 +339,7 @@ const main = async () => {
     };
 
     try {
-        CONFIG.db = await getDatabase(CONFIG);
+        await openDatabase(CONFIG);
         const lastPopulated = localStorage.getItem("lastPopulated");
 
         if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
