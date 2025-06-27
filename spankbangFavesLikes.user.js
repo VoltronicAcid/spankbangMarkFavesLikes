@@ -257,6 +257,7 @@ const addIconListener = (db, storeName, video) => {
 
 const getPopoutMenuEventHandler = (db, storeName, video) => {
     const handler = function () {
+        console.warn(video);
         if (video) addRemoveVideo(db, storeName, video);
     };
 
@@ -267,7 +268,7 @@ const observePopoutMenu = (config) => {
     const { db, menuIcons } = config;
     const popoutMenu = document.getElementById("popout_menu");
 
-    const popoutMenuObserver = new MutationObserver((records) => {
+    const observer = new MutationObserver((records) => {
         for (const mutation of records) {
             if (mutation.target.style.display === "block") {
                 for (const { selector, name, highlightColor } of menuIcons) {
@@ -289,7 +290,7 @@ const observePopoutMenu = (config) => {
             }
         }
     });
-    popoutMenuObserver.observe(popoutMenu, { attributes: true, childList: true, subtree: true, });
+    observer.observe(popoutMenu, { attributes: true, childList: true, subtree: true, });
 };
 
 const addPopoutMenuEventHandlers = (config) => {
@@ -297,31 +298,26 @@ const addPopoutMenuEventHandlers = (config) => {
     const popoutMenu = document.getElementById("popout_menu");
 
     const videoDivs = document.querySelectorAll("div.video-item");
-    if (videoDivs.length) {
+    for (const { name, selector } of config.menuIcons) {
         videoDivs.forEach((videoDiv) => {
-            const video = divToVideo(videoDiv);
-            const watchLaterMenuHandler = getPopoutMenuEventHandler(db, "watchLater", video);
-            const favoritesMenuHandler = getPopoutMenuEventHandler(db, "favorites", video);
-
+            const handler = getPopoutMenuEventHandler(db, name, divToVideo(videoDiv));
             const menuSpan = videoDiv.querySelector("span.show-items-menu-trigger");
+
             if (!menuSpan) return;
 
             const innerSpan = menuSpan.querySelector("span.items-center");
 
-            const spanObserver = new MutationObserver((mutationRecords) => {
-                const watchIcon = popoutMenu.querySelector(".b.wl");
-                const favIcon = popoutMenu.querySelector(".b.fav");
+            const observer = new MutationObserver((mutationRecords) => {
+                const icon = popoutMenu.querySelector(selector);
                 for (const record of mutationRecords) {
-                    if (record.type === "attributes" && record.target.ariaSelected === "true") {
-                        watchIcon.addEventListener("click", watchLaterMenuHandler);
-                        favIcon.addEventListener("click", favoritesMenuHandler);
-                    } else if (record.type === "attributes" && record.target.ariaSelected === "false") {
-                        watchIcon.removeEventListener("click", watchLaterMenuHandler);
-                        favIcon.removeEventListener("click", favoritesMenuHandler);
+                    if (record.target.ariaSelected === "true") {
+                        icon.addEventListener("click", handler);
+                    } else if (record.target.ariaSelected === "false") {
+                        icon.removeEventListener("click", handler);
                     }
                 }
             });
-            spanObserver.observe(innerSpan, { attributes: true, });
+            observer.observe(innerSpan, { attributes: true, });
         });
     }
 };
@@ -410,7 +406,7 @@ const main = async () => {
                 name: "favorites",
                 selector: ".b.fav",
                 highlightColor: "#f08e84",
-            }
+            },
         ],
     };
 
