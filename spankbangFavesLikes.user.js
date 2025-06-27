@@ -104,14 +104,7 @@ const divToVideo = (videoDiv) => {
     if (link) return { id: videoDiv.dataset.id, title: link.title, };
 };
 
-const getPlaylistVideos = async (storeName) => {
-    const listUrls = {
-        "likes": () => `${document.location.origin}/users/liked`,
-        "favorites": async () => await getPlaylistUrl('favorites'),
-        "watchLater": async () => await getPlaylistUrl('watch+later'),
-    };
-    const url = await listUrls[storeName]();
-
+const getPlaylistVideos = async (url) => {
     let videos = [];
     for await (const page of getPlaylistPages(url)) {
         videos = videos.concat(
@@ -141,7 +134,7 @@ const populateStores = async (config) => {
     const { db } = config;
 
     for (const storeName of Array.from(db.objectStoreNames)) {
-        const videos = await getPlaylistVideos(storeName);
+        const videos = await getPlaylistVideos(config.playlistURLs[storeName]);
 
         storePromises.push(new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, "readwrite");
@@ -408,6 +401,11 @@ const main = async () => {
                 highlightColor: "#f08e84",
             },
         ],
+        playlistURLs: {
+            favorites: await getPlaylistUrl('favorites'),
+            watchLater: await getPlaylistUrl('watch+later'),
+            likes: `${document.location.origin}/users/liked`,
+        },
     };
 
     try {
