@@ -31,9 +31,12 @@ const openDatabase = async (config) => {
             // logMessage("Upgrading/Installing database");
             const { result: db } = openRequest;
 
-            for (const [name, { keyPath, unique }] of Object.entries(config.stores)) {
-                const store = db.createObjectStore(name, { keyPath });
-                store.createIndex(keyPath, keyPath, { unique });
+            for (const { name, options, indexes } of config.stores) {
+                const store = db.createObjectStore(name, options);
+
+                for (const { name, keyPath, options } of indexes) {
+                    store.createIndex(name, keyPath, options);
+                }
             }
         };
 
@@ -50,12 +53,9 @@ const openDatabase = async (config) => {
             resolve(db);
         };
 
-        openRequest.onerror = function () {
+        openRequest.onerror = function (event) {
             logError(`Error with open database request.`);
-            const { code, message, name } = openRequest.error;
-            console.error(code, name);
-            console.error(message);
-            reject(message);
+            reject(event.target.error);
         }
     });
 };
@@ -140,32 +140,49 @@ const highlightIcon = (storeName) => {
     if (icon) icon.style.fill = icon.style.fill ? "" : HIGHLIGHT_COLOR;
 };
 
-const populateStore = async (db, storeName) => {
-    // logMessage(`Populating ${storeName} store.`);
-    const videos = await getVideos(storeName);
+const populateStores = async (config) => {
+    const storePromises = [];
+    const { db } = config;
 
-    const inserts = new Promise((resolve, reject) => {
-        const transaction = db.transaction(storeName, "readwrite");
-        const store = transaction.objectStore(storeName);
+    for (const storeName of Array.from(db.objectStoreNames)) {
+        const videos = await getVideos(storeName);
 
-        transaction.oncomplete = function () {
-            // logMessage(`Completed populating "${storeName}" store.`);
-            resolve();
-        };
-        transaction.onerror = function (event) {
-            logError(`Unable to populate "${storeName}" store.`);
-            console.log(event);
-            console.log(transaction);
-            reject();
-        };
+        storePromises.push(new Promise((resolve, reject) => {
+            const transaction = db.transaction(storeName, "readwrite");
+            transaction.oncomplete = () => resolve(transaction);
+            transaction.onerror = function (event) {
+                event.stopPropagation();
+                const error = {
+                    message: `${event.target.error.name}: ${event.target.error.message}`,
+                    storeName,
+                };
+                reject(error);
+            };
+            transaction.onabort = function (event) {
+                const error = {
+                    message: `${event.target.error.name}: ${event.target.error.message}`,
+                    storeName,
+                };
+                reject(error);
+            };
 
-        for (const video of videos) {
-            // logMessage(`Putting ${video.title} into ${storeName} store.`);
-            store.put(video);
-        }
-    });
+            const store = transaction.objectStore(storeName);
+            for (const video of videos) {
+                const request = store.put(video);
+                request.onerror = function (event) {
+                    event.stopPropagation();
+                    const error = {
+                        message: `${event.target.error.name}: ${event.target.error.message}`,
+                        storeName,
+                        video,
+                    };
+                    reject(error);
+                };
+            }
+        }));
+    }
 
-    return inserts;
+    return Promise.allSettled(storePromises);
 };
 
 const isInStore = async (db, storeName, video) => {
@@ -331,11 +348,53 @@ const updateVideoIcons = async (config) => {
 const main = async () => {
     const CONFIG = {
         db: undefined,
-        stores: {
-            "favorites": { keyPath: "id", unique: true, },
-            "watchLater": { keyPath: "id", unique: true, },
-            "likes": { keyPath: "id", unique: true, },
-        },
+        stores: [
+            {
+                name: "favorites",
+                options: {
+                    keyPath: "id",
+                },
+                indexes: [
+                    {
+                        name: "id",
+                        keyPath: "id",
+                        options: {
+                            unique: true,
+                        },
+                    },
+                ],
+            },
+            {
+                name: "watchLater",
+                options: {
+                    keyPath: "id",
+                },
+                indexes: [
+                    {
+                        name: "id",
+                        keyPath: "id",
+                        options: {
+                            unique: true,
+                        },
+                    },
+                ],
+            },
+            {
+                name: "likes",
+                options: {
+                    keyPath: "id",
+                },
+                indexes: [
+                    {
+                        name: "id",
+                        keyPath: "id",
+                        options: {
+                            unique: true,
+                        },
+                    },
+                ],
+            },
+        ],
     };
 
     try {
@@ -343,7 +402,7 @@ const main = async () => {
         const lastPopulated = localStorage.getItem("lastPopulated");
 
         if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
-            await Promise.allSettled(Object.keys(CONFIG.stores).map((storeName) => populateStore(CONFIG.db, storeName)));
+            await populateStores(CONFIG)
             localStorage.setItem("lastPopulated", new Date().getTime());
         }
 
@@ -355,7 +414,6 @@ const main = async () => {
         }
     } catch (err) {
         console.trace(err);
-        return;
     }
 };
 
