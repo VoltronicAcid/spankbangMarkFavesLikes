@@ -2,7 +2,7 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.1.2
+// @version       0.1.3
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         https://spankbang.com/*
@@ -60,7 +60,7 @@ const openDatabase = async (config) => {
     });
 };
 
-async function* getPages(url) {
+async function* getPlaylistPages(url) {
     while (url) {
         try {
             // logMessage(`Fetching URL:\t${url}`);
@@ -84,8 +84,6 @@ async function* getPages(url) {
 
 const getPlaylistUrl = async (name) => {
     // logMessage(`Getting link for "${name}".`);
-    const query = `a.playlist-item[href$="/${name}/"]`;
-
     try {
         const response = await fetch(`${document.location.origin}/users/playlists`);
         if (response.ok) {
@@ -93,11 +91,10 @@ const getPlaylistUrl = async (name) => {
             const parser = new DOMParser();
             const page = parser.parseFromString(html, "text/html");
 
-            return page.querySelector(query).href;
+            return page.querySelector(`a.playlist-item[href$="/${name}/"]`).href;
         }
     } catch (err) {
         console.error(err);
-        console.trace(err);
     }
 };
 
@@ -107,7 +104,7 @@ const divToVideo = (videoDiv) => {
     if (link) return { id: videoDiv.dataset.id, title: link.title, };
 };
 
-const getVideos = async (storeName) => {
+const getPlaylistVideos = async (storeName) => {
     const listUrls = {
         "likes": () => `${document.location.origin}/users/liked`,
         "favorites": async () => await getPlaylistUrl('favorites'),
@@ -116,11 +113,10 @@ const getVideos = async (storeName) => {
     const url = await listUrls[storeName]();
 
     let videos = [];
-    for await (const page of getPages(url)) {
+    for await (const page of getPlaylistPages(url)) {
         videos = videos.concat(
             Array.from(
                 page.getElementsByClassName("video-item"))
-                // .map((div) => ({ id: div.dataset.id, title: div.querySelector("a[title]").title }))
                 .map(divToVideo)
         );
     }
@@ -145,7 +141,7 @@ const populateStores = async (config) => {
     const { db } = config;
 
     for (const storeName of Array.from(db.objectStoreNames)) {
-        const videos = await getVideos(storeName);
+        const videos = await getPlaylistVideos(storeName);
 
         storePromises.push(new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, "readwrite");
@@ -267,11 +263,42 @@ const getPopoutMenuEventHandler = (db, storeName, video) => {
     return handler;
 };
 
+const observePopoutMenu = (config) => {
+    const { db, menuIcons } = config;
+    const popoutMenu = document.getElementById("popout_menu");
+
+    const popoutMenuObserver = new MutationObserver((records) => {
+        for (const mutation of records) {
+            if (mutation.target.style.display === "block") {
+                for (const { selector, name, highlightColor } of menuIcons) {
+                    setTimeout(async () => {
+                        const span = document.querySelector("span[aria-selected=true]");
+                        const icon = popoutMenu.querySelector(selector);
+                        icon.firstElementChild.style.fill = "";
+
+                        const videoDiv = span.closest("div.video-item");
+                        const video = divToVideo(videoDiv);
+
+                        if (await isInStore(db, name, video)) icon.firstElementChild.style.fill = highlightColor;
+                    }, 300);
+                }
+            } else if (mutation.target.style.display === "none") {
+                for (const { selector } of menuIcons) {
+                    const icon = popoutMenu.querySelector(selector);
+                    icon.firstElementChild.style.fill = "";
+                }
+            }
+        }
+    });
+    popoutMenuObserver.observe(popoutMenu, { attributes: true, childList: true, subtree: true, });
+};
+
 const updatePopoutMenu = (config) => {
     const { db } = config;
     const popoutMenu = document.getElementById("popout_menu");
 
     if (popoutMenu) {
+        observePopoutMenu(config);
         const videoDivs = document.querySelectorAll("div.video-item");
         if (videoDivs.length) {
             videoDivs.forEach((videoDiv) => {
@@ -300,33 +327,6 @@ const updatePopoutMenu = (config) => {
                 spanObserver.observe(innerSpan, { attributes: true, });
             });
         }
-
-        const popoutMenuObserver = new MutationObserver((records) => {
-            for (const mutation of records) {
-                if (mutation.target.style.display === "block") {
-                    setTimeout(async () => {
-                        const span = document.querySelector("span[aria-selected=true]");
-                        const watchIcon = popoutMenu.querySelector(".b.wl");
-                        const favIcon = popoutMenu.querySelector(".b.fav");
-                        watchIcon.firstElementChild.style.fill = "";
-                        favIcon.firstElementChild.style.fill = "";
-
-                        const videoDiv = span.closest("div.video-item");
-                        const video = divToVideo(videoDiv);
-
-                        if (await isInStore(db, "watchLater", video)) watchIcon.firstElementChild.style.fill = "#f08e84";
-                        if (await isInStore(db, "favorites", video)) favIcon.firstElementChild.style.fill = "#f08e84";
-
-                    }, 300);
-                } else if (mutation.target.style.display === "none") {
-                    const watchIcon = popoutMenu.querySelector(".b.wl");
-                    const favIcon = popoutMenu.querySelector(".b.fav");
-                    watchIcon.firstElementChild.style.fill = "";
-                    favIcon.firstElementChild.style.fill = "";
-                }
-            }
-        });
-        popoutMenuObserver.observe(popoutMenu, { attributes: true, childList: true, subtree: true, });
     }
 };
 
@@ -394,6 +394,18 @@ const main = async () => {
                     },
                 ],
             },
+        ],
+        menuIcons: [
+            {
+                name: "watchLater",
+                selector: ".b.wl",
+                highlightColor: "#f08e84",
+            },
+            {
+                name: "favorites",
+                selector: ".b.fav",
+                highlightColor: "#f08e84",
+            }
         ],
     };
 
