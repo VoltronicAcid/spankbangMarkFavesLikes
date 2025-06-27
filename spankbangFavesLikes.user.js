@@ -273,14 +273,13 @@ const observePopoutMenu = (config) => {
                 for (const { selector, name, highlightColor } of menuIcons) {
                     setTimeout(async () => {
                         const span = document.querySelector("span[aria-selected=true]");
+                        const videoDiv = span.closest("div.video-item");
+                        const video = divToVideo(videoDiv);
                         const icon = popoutMenu.querySelector(selector);
                         icon.firstElementChild.style.fill = "";
 
-                        const videoDiv = span.closest("div.video-item");
-                        const video = divToVideo(videoDiv);
-
                         if (await isInStore(db, name, video)) icon.firstElementChild.style.fill = highlightColor;
-                    }, 300);
+                    }, 0);
                 }
             } else if (mutation.target.style.display === "none") {
                 for (const { selector } of menuIcons) {
