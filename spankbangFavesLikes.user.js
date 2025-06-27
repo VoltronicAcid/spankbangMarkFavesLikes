@@ -117,16 +117,10 @@ const getPlaylistVideos = async (url) => {
     return videos;
 };
 
-const highlightIcon = (storeName) => {
-    const HIGHLIGHT_COLOR = "#f08e84";
-    const queries = {
-        "favorites": "div.fv > svg.i_svg.i_new-ui-heart-outlined",
-        "watchLater": "div.wl > svg.i_svg.i_new-ui-time",
-        "likes": "span.hot > svg.i_svg.i_new-ui-checkmark-circle-outlined",
-    };
-    const icon = document.querySelector(queries[storeName]);
+const highlightIcon = (selector, color) => {
+    const icon = document.querySelector(selector);
 
-    if (icon) icon.style.fill = icon.style.fill ? "" : HIGHLIGHT_COLOR;
+    if (icon) icon.style.fill = icon.style.fill ? "" : color;
 };
 
 const populateStores = async (config) => {
@@ -232,17 +226,15 @@ const addRemoveVideo = async (db, storeName, video) => {
     return toggle;
 };
 
-const addIconListener = (db, storeName, video) => {
-    const iconQueries = {
-        "favorites": "div.fv",
-        "watchLater": "div.wl",
-        "likes": "span.hot",
-    };
-    const icon = document.querySelector(iconQueries[storeName]);
+const addIconListener = (config, storeName, video) => {
+    const { db, videoIcons } = config;
+    const { container, selector, highlightColor } = videoIcons[storeName];
+
+    const icon = document.querySelector(container);
 
     icon.addEventListener("click", async () => {
         await addRemoveVideo(db, storeName, video);
-        highlightIcon(storeName);
+        highlightIcon(selector, highlightColor);
     });
 
     return;
@@ -324,18 +316,18 @@ const updatePopoutMenu = (config) => {
     }
 };
 
-const updateVideoIcons = async (config) => {
+const updateVideoIcons = (config) => {
     const { db, stores } = config;
     const video = {
         id: document.getElementById("video")?.dataset.videoid,
         title: document.querySelector("h1.main_content_title")?.title,
     };
 
-    for (const storeName in stores) {
-        addIconListener(db, storeName, video);
-        const inStore = await isInStore(db, storeName, video);
-        // logMessage(`${video.id} ${inStore ? "IS" : "is NOT"} in "${storeName}" store.`);
-        if (inStore) highlightIcon(storeName);
+    for (const { name } of stores) {
+        addIconListener(config, name, video);
+        // // logMessage(`${video.id} ${inStore ? "IS" : "is NOT"} in "${name}" store.`);
+        const { selector, highlightColor } = config.videoIcons[name];
+        isInStore(db, name, video).then((exists) => exists && highlightIcon(selector, highlightColor));
     }
 };
 
@@ -401,6 +393,23 @@ const main = async () => {
                 highlightColor: "#f08e84",
             },
         ],
+        videoIcons: {
+            favorites: {
+                container: "div.fv",
+                selector: "div.fv > svg.i_svg.i_new-ui-heart-outlined",
+                highlightColor: "#f08e84",
+            },
+            watchLater: {
+                container: "div.wl",
+                selector: "div.wl > svg.i_svg.i_new-ui-time",
+                highlightColor: "#f08e84",
+            },
+            likes: {
+                container: "span.hot",
+                selector: "span.hot > svg.i_svg.i_new-ui-checkmark-circle-outlined",
+                highlightColor: "#f08e84",
+            },
+        },
         playlistURLs: {
             favorites: await getPlaylistUrl('favorites'),
             watchLater: await getPlaylistUrl('watch+later'),
