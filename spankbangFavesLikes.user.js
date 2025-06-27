@@ -2,7 +2,7 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.1.3
+// @version       0.1.4
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         https://spankbang.com/*
@@ -178,7 +178,8 @@ const isInStore = async (db, storeName, video) => {
         request.onsuccess = function () {
             resolve(request.result !== undefined);
         };
-        request.onerror = function () {
+        request.onerror = function (event) {
+            event.stopPropagation();
             logError(`Error with request on store ${storeName}`);
             reject(request.error);
         };
@@ -201,7 +202,8 @@ const addRemoveVideo = async (db, storeName, video) => {
                     // logMessage(`Deleted ${JSON.stringify(video)} from ${storeName}`);
                     resolve(deleteRequest.result);
                 };
-                deleteRequest.onerror = function () {
+                deleteRequest.onerror = function (event) {
+                    event.stopPropagation();
                     logError(`Unable to delete ${JSON.stringify(video)} from ${storeName}`);
                     reject(deleteRequest.error);
                 }
@@ -211,13 +213,15 @@ const addRemoveVideo = async (db, storeName, video) => {
                     // logMessage(`Added ${JSON.stringify(video)} to ${storeName}`);
                     resolve(addRequest.result);
                 };
-                addRequest.onerror = function () {
+                addRequest.onerror = function (event) {
+                    event.stopPropagation();
                     logError(`Unable to add ${JSON.stringify(video)} to ${storeName}`);
                     reject(addRequest.error);
                 };
             }
         }
-        getRequest.onerror = function () {
+        getRequest.onerror = function (event) {
+            event.stopPropagation();
             logError(`Get request for ${JSON.stringify(video)} from ${storeName} failed`);
             reject(getRequest.error);
         }
@@ -232,8 +236,9 @@ const addIconListener = (config, storeName, video) => {
 
     const icon = document.querySelector(container);
 
-    icon.addEventListener("click", async () => {
-        await addRemoveVideo(db, storeName, video);
+    icon.addEventListener("click", () => {
+        addRemoveVideo(db, storeName, video)
+            .catch((err) => console.error(`${err}\n${video.id} - ${video.title}`));
         highlightIcon(selector, highlightColor);
     });
 
@@ -242,8 +247,10 @@ const addIconListener = (config, storeName, video) => {
 
 const getPopoutMenuEventHandler = (db, storeName, video) => {
     const handler = function () {
-        console.warn(video);
-        if (video) addRemoveVideo(db, storeName, video);
+        if (video) {
+            addRemoveVideo(db, storeName, video)
+                .catch((err) => console.error(`${err}\n${video.id} - ${video.title}`));
+        }
     };
 
     return handler;
@@ -421,17 +428,17 @@ const main = async () => {
         await openDatabase(CONFIG);
         const lastPopulated = localStorage.getItem("lastPopulated");
 
-        if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
-            await populateStores(CONFIG)
-            localStorage.setItem("lastPopulated", new Date().getTime());
-        }
-
-        updatePopoutMenu(CONFIG);
+        // if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
+        await populateStores(CONFIG)
+        localStorage.setItem("lastPopulated", new Date().getTime());
+        // }
 
         const videoPlayer = document.querySelector("video#main_video_player_html5_api");
         if (videoPlayer) {
             updateVideoIcons(CONFIG);
         }
+
+        updatePopoutMenu(CONFIG);
     } catch (err) {
         console.trace(err);
     }
