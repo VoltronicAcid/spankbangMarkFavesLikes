@@ -256,8 +256,8 @@ const addIconListener = (db, storeName, video) => {
 };
 
 const getPopoutMenuEventHandler = (db, storeName, video) => {
-    const handler = async function () {
-        if (video) await addRemoveVideo(db, storeName, video);
+    const handler = function () {
+        if (video) addRemoveVideo(db, storeName, video);
     };
 
     return handler;
@@ -292,40 +292,46 @@ const observePopoutMenu = (config) => {
     popoutMenuObserver.observe(popoutMenu, { attributes: true, childList: true, subtree: true, });
 };
 
-const updatePopoutMenu = (config) => {
+const addPopoutMenuEventHandlers = (config) => {
     const { db } = config;
+    const popoutMenu = document.getElementById("popout_menu");
+
+    const videoDivs = document.querySelectorAll("div.video-item");
+    if (videoDivs.length) {
+        videoDivs.forEach((videoDiv) => {
+            const video = divToVideo(videoDiv);
+            const watchLaterMenuHandler = getPopoutMenuEventHandler(db, "watchLater", video);
+            const favoritesMenuHandler = getPopoutMenuEventHandler(db, "favorites", video);
+
+            const menuSpan = videoDiv.querySelector("span.show-items-menu-trigger");
+            if (!menuSpan) return;
+
+            const innerSpan = menuSpan.querySelector("span.items-center");
+
+            const spanObserver = new MutationObserver((mutationRecords) => {
+                const watchIcon = popoutMenu.querySelector(".b.wl");
+                const favIcon = popoutMenu.querySelector(".b.fav");
+                for (const record of mutationRecords) {
+                    if (record.type === "attributes" && record.target.ariaSelected === "true") {
+                        watchIcon.addEventListener("click", watchLaterMenuHandler);
+                        favIcon.addEventListener("click", favoritesMenuHandler);
+                    } else if (record.type === "attributes" && record.target.ariaSelected === "false") {
+                        watchIcon.removeEventListener("click", watchLaterMenuHandler);
+                        favIcon.removeEventListener("click", favoritesMenuHandler);
+                    }
+                }
+            });
+            spanObserver.observe(innerSpan, { attributes: true, });
+        });
+    }
+};
+
+const updatePopoutMenu = (config) => {
     const popoutMenu = document.getElementById("popout_menu");
 
     if (popoutMenu) {
         observePopoutMenu(config);
-        const videoDivs = document.querySelectorAll("div.video-item");
-        if (videoDivs.length) {
-            videoDivs.forEach((videoDiv) => {
-                const video = divToVideo(videoDiv);
-                const watchLaterMenuHandler = getPopoutMenuEventHandler(db, "watchLater", video);
-                const favoritesMenuHandler = getPopoutMenuEventHandler(db, "favorites", video);
-
-                const menuSpan = videoDiv.querySelector("span.show-items-menu-trigger");
-                if (!menuSpan) return;
-
-                const innerSpan = menuSpan.querySelector("span.items-center");
-
-                const spanObserver = new MutationObserver((mutationRecords) => {
-                    const watchIcon = popoutMenu.querySelector(".b.wl");
-                    const favIcon = popoutMenu.querySelector(".b.fav");
-                    for (const record of mutationRecords) {
-                        if (record.type === "attributes" && record.target.ariaSelected === "true") {
-                            watchIcon.addEventListener("click", watchLaterMenuHandler);
-                            favIcon.addEventListener("click", favoritesMenuHandler);
-                        } else if (record.type === "attributes" && record.target.ariaSelected === "false") {
-                            watchIcon.removeEventListener("click", watchLaterMenuHandler);
-                            favIcon.removeEventListener("click", favoritesMenuHandler);
-                        }
-                    }
-                });
-                spanObserver.observe(innerSpan, { attributes: true, });
-            });
-        }
+        addPopoutMenuEventHandlers(config);
     }
 };
 
