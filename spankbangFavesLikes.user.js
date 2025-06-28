@@ -2,7 +2,7 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.1.4
+// @version       0.1.5
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         https://spankbang.com/*
@@ -282,7 +282,7 @@ const observePopoutMenu = (config) => {
             }
         }
     });
-    observer.observe(popoutMenu, { attributes: true, childList: true, subtree: true, });
+    observer.observe(popoutMenu, { attributes: true, attributeFilter: ["style"], });
 };
 
 const addPopoutMenuEventHandlers = (config) => {
@@ -309,7 +309,7 @@ const addPopoutMenuEventHandlers = (config) => {
                     }
                 }
             });
-            observer.observe(innerSpan, { attributes: true, });
+            observer.observe(innerSpan, { attributes: true, attributeFilter: ["aria-selected"] });
         });
     }
 };
@@ -428,10 +428,10 @@ const main = async () => {
         await openDatabase(CONFIG);
         const lastPopulated = localStorage.getItem("lastPopulated");
 
-        // if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
-        await populateStores(CONFIG)
-        localStorage.setItem("lastPopulated", new Date().getTime());
-        // }
+        if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
+            await populateStores(CONFIG)
+            localStorage.setItem("lastPopulated", new Date().getTime());
+        }
 
         const videoPlayer = document.querySelector("video#main_video_player_html5_api");
         if (videoPlayer) {
