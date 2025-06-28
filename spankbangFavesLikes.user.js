@@ -260,24 +260,18 @@ const observePopoutMenu = (config) => {
     const popoutMenu = document.getElementById("popout_menu");
 
     const observer = new MutationObserver((records) => {
-        for (const mutation of records) {
-            if (mutation.target.style.display === "block") {
-                for (const { selector, name, highlightColor } of menuIcons) {
-                    setTimeout(async () => {
-                        const span = document.querySelector("span[aria-selected=true]");
-                        const videoDiv = span.closest("div.video-item, div.js-video-item");
-                        const video = divToVideo(videoDiv);
-                        const icon = popoutMenu.querySelector(selector);
-                        icon.firstElementChild.style.fill = "";
+        if (records.some((record) => record.target.style.display === "block")) {
+            for (const { selector, name, highlightColor } of menuIcons) {
+                const icon = popoutMenu.querySelector(selector);
+                icon.firstElementChild.style.fill = "";
 
-                        if (await isInStore(db, name, video)) icon.firstElementChild.style.fill = highlightColor;
-                    }, 0);
-                }
-            } else if (mutation.target.style.display === "none") {
-                for (const { selector } of menuIcons) {
-                    const icon = popoutMenu.querySelector(selector);
-                    icon.firstElementChild.style.fill = "";
-                }
+                setTimeout(async () => {
+                    const span = document.querySelector("span[aria-selected=true]");
+                    const videoDiv = span.closest("div.video-item, div.js-video-item");
+                    const video = divToVideo(videoDiv);
+
+                    if (await isInStore(db, name, video)) icon.firstElementChild.style.fill = highlightColor;
+                }, 0);
             }
         }
     });
