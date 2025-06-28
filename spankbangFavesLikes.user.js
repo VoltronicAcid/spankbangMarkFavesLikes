@@ -282,7 +282,8 @@ const addPopoutMenuEventHandlers = (config) => {
     const { db } = config;
     const popoutMenu = document.getElementById("popout_menu");
 
-    const videoDivs = document.querySelectorAll("div.video-item, div.js-video-item");
+    const videoDivs = document.querySelectorAll("div.video-item:has(span.show-items-menu-trigger), div.js-video-item:has(span.show-items-menu-trigger)");
+
     for (const { name, selector } of config.menuIcons) {
         videoDivs.forEach((videoDiv) => {
             const handler = getPopoutMenuEventHandler(db, name, divToVideo(videoDiv));
