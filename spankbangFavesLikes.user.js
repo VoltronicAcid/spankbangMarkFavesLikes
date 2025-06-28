@@ -2,12 +2,11 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.1.5
+// @version       0.1.6
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
-// @match         https://spankbang.com/*
-// @match         https://*.spankbang.com/*
-// @run-at        document-idle
+// @match         https://*spankbang.com/*
+// @run-at        document-idle 
 // ==/UserScript==
 
 const logMessage = (msg) => {
@@ -266,7 +265,7 @@ const observePopoutMenu = (config) => {
                 for (const { selector, name, highlightColor } of menuIcons) {
                     setTimeout(async () => {
                         const span = document.querySelector("span[aria-selected=true]");
-                        const videoDiv = span.closest("div.video-item");
+                        const videoDiv = span.closest("div.video-item, div.js-video-item");
                         const video = divToVideo(videoDiv);
                         const icon = popoutMenu.querySelector(selector);
                         icon.firstElementChild.style.fill = "";
@@ -289,7 +288,7 @@ const addPopoutMenuEventHandlers = (config) => {
     const { db } = config;
     const popoutMenu = document.getElementById("popout_menu");
 
-    const videoDivs = document.querySelectorAll("div.video-item");
+    const videoDivs = document.querySelectorAll("div.video-item, div.js-video-item");
     for (const { name, selector } of config.menuIcons) {
         videoDivs.forEach((videoDiv) => {
             const handler = getPopoutMenuEventHandler(db, name, divToVideo(videoDiv));
