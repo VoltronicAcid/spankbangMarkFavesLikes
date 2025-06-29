@@ -123,52 +123,48 @@ const highlightIcon = (selector, color) => {
 };
 
 const populateStores = async (config) => {
-    const storePromises = [];
-    const { db } = config;
+    const { db, playlistURLs } = config;
+    const populateStores = config.stores
+        .map(async (store) => {
+            const { name } = store;
+            const videos = await getPlaylistVideos(playlistURLs[name]);
 
-    for (const storeName of Array.from(db.objectStoreNames)) {
-        const videos = await getPlaylistVideos(config.playlistURLs[storeName]);
-
-        storePromises.push(new Promise((resolve, reject) => {
-            const transaction = db.transaction(storeName, "readwrite");
-            transaction.oncomplete = () => resolve(transaction);
-            transaction.onerror = function (event) {
-                event.stopPropagation();
-                const error = {
-                    message: `${event.target.error.name}: ${event.target.error.message}`,
-                    storeName,
-                };
-                reject(error);
-            };
-            transaction.onabort = function (event) {
-                const error = {
-                    message: `${event.target.error.name}: ${event.target.error.message}`,
-                    storeName,
-                };
-                reject(error);
-            };
-
-            const store = transaction.objectStore(storeName);
-            for (const video of videos) {
-                const request = store.put(video);
-                request.onerror = function (event) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(name, "readwrite");
+                transaction.oncomplete = () => resolve(transaction);
+                transaction.onerror = function (event) {
                     event.stopPropagation();
-                    const error = {
-                        message: `${event.target.error.name}: ${event.target.error.message}`,
-                        storeName,
-                        video,
-                    };
+                    const { error } = event.target;
+                    error.storeName = name;
                     reject(error);
                 };
-            }
-        }));
-    }
+                transaction.onabort = function (event) {
+                    const { error } = event.target;
+                    error.storeName = name;
+                    reject(error);
+                };
 
-    return Promise.allSettled(storePromises);
+                const store = transaction.objectStore(name);
+                for (const video of videos) {
+                    const putRequest = store.put(video);
+                    putRequest.onerror = function (event) {
+                        // event.stopPropagation();
+                        logMessage("add error");
+                        console.log(video);
+                        const { error } = event.target;
+                        error.storeName = name;
+                        error.video = video;
+                        reject(error);
+                    };
+                }
+            });
+        });
+
+    return Promise.allSettled(populateStores);
 };
 
 const isInStore = async (db, storeName, video) => {
-    const query = new Promise((resolve, reject) => {
+    return Promise((resolve, reject) => {
         // logMessage(`Checking "${storeName}" for ${video.id}`);
         const transaction = db.transaction(storeName, "readonly");
         const store = transaction.objectStore(storeName);
@@ -183,12 +179,10 @@ const isInStore = async (db, storeName, video) => {
             reject(request.error);
         };
     });
-
-    return query;
 };
 
 const addRemoveVideo = async (db, storeName, video) => {
-    const toggle = new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
         // logMessage(`Toggling ${video.id} from ${storeName}`);
         const transaction = db.transaction(storeName, "readwrite");
         const store = transaction.objectStore(storeName);
@@ -225,8 +219,6 @@ const addRemoveVideo = async (db, storeName, video) => {
             reject(getRequest.error);
         }
     });
-
-    return toggle;
 };
 
 const addIconListener = (config, storeName, video) => {
@@ -240,19 +232,15 @@ const addIconListener = (config, storeName, video) => {
             .catch((err) => console.error(`${err}\n${video.id} - ${video.title}`));
         highlightIcon(selector, highlightColor);
     });
-
-    return;
 };
 
 const getPopoutMenuEventHandler = (db, storeName, video) => {
-    const handler = function () {
+    return function () {
         if (video) {
             addRemoveVideo(db, storeName, video)
                 .catch((err) => console.error(`${err}\n${video.id} - ${video.title}`));
         }
     };
-
-    return handler;
 };
 
 const observePopoutMenu = (config) => {
@@ -326,13 +314,13 @@ const updateVideoIcons = (config) => {
 
     for (const { name } of stores) {
         addIconListener(config, name, video);
-        // // logMessage(`${video.id} ${inStore ? "IS" : "is NOT"} in "${name}" store.`);
         const { selector, highlightColor } = config.videoIcons[name];
         isInStore(db, name, video).then((exists) => exists && highlightIcon(selector, highlightColor));
     }
 };
 
 const main = async () => {
+    const highlightColor = "#f08e84";
     const CONFIG = {
         db: undefined,
         stores: [
@@ -386,29 +374,29 @@ const main = async () => {
             {
                 name: "watchLater",
                 selector: ".b.wl",
-                highlightColor: "#f08e84",
+                highlightColor,
             },
             {
                 name: "favorites",
                 selector: ".b.fav",
-                highlightColor: "#f08e84",
+                highlightColor,
             },
         ],
         videoIcons: {
             favorites: {
                 container: "div.fv",
                 selector: "div.fv > svg.i_svg.i_new-ui-heart-outlined",
-                highlightColor: "#f08e84",
+                highlightColor,
             },
             watchLater: {
                 container: "div.wl",
                 selector: "div.wl > svg.i_svg.i_new-ui-time",
-                highlightColor: "#f08e84",
+                highlightColor,
             },
             likes: {
                 container: "span.hot",
                 selector: "span.hot > svg.i_svg.i_new-ui-checkmark-circle-outlined",
-                highlightColor: "#f08e84",
+                highlightColor,
             },
         },
         playlistURLs: {
@@ -420,6 +408,7 @@ const main = async () => {
 
     try {
         await openDatabase(CONFIG);
+        Object.freeze(CONFIG);
         const lastPopulated = localStorage.getItem("lastPopulated");
 
         if (!lastPopulated || new Date().getTime() - lastPopulated > 1000 * 60 * 60 * 24) {
