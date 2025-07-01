@@ -2,7 +2,7 @@
 // @name          SpankBang - Mark Faves and Likes
 // @description   Highlights the liked and favorite buttons on videos
 // @author        VoltronicAcid
-// @version       0.1.6
+// @version       0.2.0
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
 // @match         https://*spankbang.com/*
@@ -148,9 +148,8 @@ const populateStores = async (config) => {
                 for (const video of videos) {
                     const putRequest = store.put(video);
                     putRequest.onerror = function (event) {
-                        // event.stopPropagation();
-                        logMessage("add error");
-                        console.log(video);
+                        event.stopPropagation();
+                        logMessage(`Error occurred adding ${video.id} - ${video.title} to "${name}" object store.`);
                         const { error } = event.target;
                         error.storeName = name;
                         error.video = video;
@@ -164,7 +163,7 @@ const populateStores = async (config) => {
 };
 
 const isInStore = async (db, storeName, video) => {
-    return Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
         // logMessage(`Checking "${storeName}" for ${video.id}`);
         const transaction = db.transaction(storeName, "readonly");
         const store = transaction.objectStore(storeName);
@@ -254,11 +253,15 @@ const observePopoutMenu = (config) => {
                 icon.firstElementChild.style.fill = "";
 
                 setTimeout(async () => {
-                    const span = document.querySelector("span[aria-selected=true]");
+                    const span = document.querySelector("span[aria-selected=true], span.show-items-menu-trigger.active");
                     const videoDiv = span.closest("div.video-item, div.js-video-item");
                     const video = divToVideo(videoDiv);
 
-                    if (await isInStore(db, name, video)) icon.firstElementChild.style.fill = highlightColor;
+                    if (await isInStore(db, name, video)) {
+                        icon.firstElementChild.style.fill = span.classList.contains("show-items-menu-trigger")
+                            ? "#cf3952"
+                            : highlightColor;
+                    }
                 }, 0);
             }
         }
@@ -276,22 +279,41 @@ const addPopoutMenuEventHandlers = (config) => {
         videoDivs.forEach((videoDiv) => {
             const handler = getPopoutMenuEventHandler(db, name, divToVideo(videoDiv));
             const menuSpan = videoDiv.querySelector("span.show-items-menu-trigger");
-
             if (!menuSpan) return;
 
             const innerSpan = menuSpan.querySelector("span.items-center");
 
-            const observer = new MutationObserver((mutationRecords) => {
-                const icon = popoutMenu.querySelector(selector);
-                for (const record of mutationRecords) {
-                    if (record.target.ariaSelected === "true") {
-                        icon.addEventListener("click", handler);
-                    } else if (record.target.ariaSelected === "false") {
-                        icon.removeEventListener("click", handler);
+            if (innerSpan) {
+                const observer = new MutationObserver((mutationRecords) => {
+                    const icon = popoutMenu.querySelector(selector);
+                    for (const record of mutationRecords) {
+                        const { target } = record;
+
+                        if (target.ariaSelected === "true") {
+                            icon.addEventListener("click", handler);
+                        } else if (target.ariaSelected === "false") {
+                            icon.removeEventListener("click", handler);
+                        }
                     }
-                }
-            });
-            observer.observe(innerSpan, { attributes: true, attributeFilter: ["aria-selected"] });
+                });
+
+                observer.observe(innerSpan, { attributes: true, attributeFilter: ["aria-selected"] });
+            } else {
+                const observer = new MutationObserver((mutationRecords) => {
+                    const icon = popoutMenu.querySelector(selector);
+                    for (const record of mutationRecords) {
+                        const { target } = record;
+
+                        if (target.classList.contains('active')) {
+                            icon.addEventListener("click", handler);
+                        } else {
+                            icon.removeEventListener("click", handler);
+                        }
+                    }
+                });
+
+                observer.observe(menuSpan, { attributes: true, attributeFilter: ['class'], });
+            }
         });
     }
 };
