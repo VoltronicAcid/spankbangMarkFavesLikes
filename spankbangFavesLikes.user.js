@@ -5,6 +5,7 @@
 // @version       0.2.0
 // @homepageURL   https://github.com/VoltronicAcid/spankbangMarkFavesLikes
 // @supportURL    https://github.com/VoltronicAcid/spankbangMarkFavesLikes/issues
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=spankbang.com
 // @match         https://*spankbang.com/*
 // @run-at        document-idle 
 // ==/UserScript==
